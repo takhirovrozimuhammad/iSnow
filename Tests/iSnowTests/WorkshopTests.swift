@@ -154,6 +154,23 @@ private func advance(_ w: SnowWorkshop, frames: Int = 120, surfaces: [CraftSurfa
     #expect(w.balls[0].hostKey == -1)
 }
 
+@Test @MainActor func largeBallReleasedInsideTheBottomDriftDoesNotTunnel() {
+    let w = SnowWorkshop()
+    _ = rolled(w, radius: 35, x: 150, y: 5)
+    advance(w)
+    #expect(w.balls.count == 1)
+    #expect(w.balls[0].hostKey == -1)
+    #expect(abs(w.balls[0].y - 35) < 0.01)
+}
+
+@Test @MainActor func releasingBelowAWindowDoesNotTeleportOntoItsRoof() {
+    let w = SnowWorkshop()
+    _ = rolled(w, radius: 20, x: 150, y: 40)
+    advance(w, surfaces: [surface(), surface(9, x: 80, y: 199, width: 400)])
+    #expect(w.balls.count == 1)
+    #expect(w.balls[0].hostKey == -1)
+}
+
 @Test @MainActor func panelsHideUnderMenus() {
     let w = SnowWorkshop()
     _ = rolled(w, radius: 20, x: 150, y: 200)
@@ -204,4 +221,7 @@ private func advance(_ w: SnowWorkshop, frames: Int = 120, surfaces: [CraftSurfa
     sim.step(dt: 1 / 60, now: 3, craft: false)
     #expect(sim.workshop.balls.count == 1)
     #expect(sim.workshop.balls[0].radius > 6)
+    for i in 0..<120 { sim.step(dt: 1 / 60, now: 4 + Double(i) / 60) }
+    #expect(sim.workshop.balls.count == 1)
+    #expect(!sim.workshop.balls[0].falling)
 }

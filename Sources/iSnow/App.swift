@@ -214,6 +214,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.poll()
             }
         })
+        if !UserDefaults.standard.bool(forKey: "winterStudioWelcomeShown") {
+            UserDefaults.standard.set(true, forKey: "winterStudioWelcomeShown")
+            DispatchQueue.main.async { self.showSettings(tab: 2) }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -340,7 +344,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             o.fps = cfg.fps
             o.calmAtLowerRate = cfg.calmLowerRate
-            if o.sim.sync(windows: tracker.windows, occluders: tracker.overlayOccluders, dock: tracker.dockFrame,
+            if o.sim.sync(windows: tracker.windows,
+                          occluders: tracker.overlayOccluders + (settingsWindow.flatMap { $0.isVisible ? [$0.frame] : nil } ?? []),
+                          dock: tracker.dockFrame,
                           icons: tracker.icons, widgets: tracker.widgets, dockEstimated: tracker.dockEstimated,
                           dockAvoid: tracker.dockAvoid,
                           // In a full-screen Space the menu bar windows stay listed (just auto-hidden), but the

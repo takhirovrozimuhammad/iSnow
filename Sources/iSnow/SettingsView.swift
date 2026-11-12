@@ -45,6 +45,7 @@ struct SettingsView: View {
         }
         .frame(minWidth: 860, minHeight: 660)
         .tint(WinterStyle.accent)
+        .accentColor(WinterStyle.accent)
         .preferredColorScheme(.dark)
         .onAppear {
             settings.refreshLoginStatus()

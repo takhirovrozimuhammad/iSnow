@@ -78,7 +78,7 @@ struct SimConfig: Codable, Equatable, Sendable {
     var frost = false
     var pauseFullscreen = true         // detect full-screen apps (hide decorations there)
     var fullscreenSnow: Double = 0.3   // opacity of the snowfall over full-screen apps (0 = no snow)
-    var fahrenheit = Locale.current.measurementSystem == .us
+    var fahrenheit = false
     var batterySaver = true            // on battery: 30 fps, 1× rendering, fewer flakes, no sparkle
     var retina = false                 // render at the screen's full Retina resolution (costs battery)
     var hideFromCapture = false        // keep the snow out of screenshots and screen sharing

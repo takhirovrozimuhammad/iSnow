@@ -11,7 +11,8 @@ enum StudioPreview {
         var pending = names.count
         for (tab, name) in names.enumerated() {
             let settings = Settings(preview: SimConfig())
-            let host = NSHostingView(rootView: SettingsView(settings: settings, delegate: delegate, tab: tab, activates: false))
+            let host = NSHostingView(rootView: SettingsView(settings: settings, delegate: delegate, tab: tab, activates: false)
+                .environment(\.controlActiveState, .key))
             host.frame = CGRect(x: 0, y: 0, width: 900, height: 760)
             host.appearance = NSAppearance(named: .darkAqua)
             let window = NSWindow(contentRect: host.frame, styleMask: [.titled, .closable], backing: .buffered, defer: false)

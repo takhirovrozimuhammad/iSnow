@@ -29,6 +29,7 @@ final class SnowWorkshop {
         var hostKey: Int?
         var hostRect: CGRect?
         var ignoredSupport: Int?
+        var justDropped = true
         var hidden = false
         var rect: CGRect {
             CGRect(x: CGFloat(x - radius - 3), y: CGFloat(y - radius - 3),
@@ -39,6 +40,7 @@ final class SnowWorkshop {
         let id: UUID
         var snowman: Snowman
         var ignoredSupport: Int?
+        var justDropped = true
     }
     struct Target { let id: UUID; let rect: CGRect }
 
@@ -134,6 +136,7 @@ final class SnowWorkshop {
 
     func drop(_ id: UUID) {
         if let i = balls.firstIndex(where: { $0.id == id }) {
+            balls[i].justDropped = true
             if let parent = snapCandidate(for: id) {
                 balls[i].parent = parent.id
                 balls[i].falling = false
@@ -146,6 +149,7 @@ final class SnowWorkshop {
                 balls[i].vy = 0
             }
         } else if let i = figures.firstIndex(where: { $0.id == id }) {
+            figures[i].justDropped = true
             figures[i].snowman.carried = false
             figures[i].snowman.falling = true
             figures[i].snowman.vy = 0
@@ -233,7 +237,10 @@ final class SnowWorkshop {
                 }
             }
             if balls[i].falling {
-                let old = balls[i].y - balls[i].radius
+                // A freshly released ball may already overlap a drift (especially a big ball held
+                // right at the bottom). Resolve that contact once instead of tunnelling through it.
+                let old = balls[i].y + (balls[i].justDropped ? balls[i].radius : -balls[i].radius)
+                balls[i].justDropped = false
                 balls[i].vy -= 900 * dt
                 balls[i].y += balls[i].vy * dt
                 let bottom = balls[i].y - balls[i].radius
@@ -266,7 +273,8 @@ final class SnowWorkshop {
                     else { figures[i].ignoredSupport = s.hostKey; s.falling = true; s.vy = 0 }
                 }
                 if s.falling {
-                    let old = s.baseY
+                    let old = s.baseY + (figures[i].justDropped ? s.R(0) * 1.84 : 0)
+                    figures[i].justDropped = false
                     s.vy -= 900 * dt; s.baseY += s.vy * dt
                     if let support = landing(x: s.anchorX, old: old, new: s.baseY, surfaces: surfaces,
                                              ignoring: figures[i].ignoredSupport) {
