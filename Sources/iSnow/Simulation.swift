@@ -18,6 +18,7 @@ struct Debris {
     var x, y, vx, vy, size, alpha: Float
     var lands: Bool
     var fade: Float = 1.6        // alpha lost per second (powder only)
+    var sourceSurface: Int? = nil  // a detached drift must not land back on the window it left
 }
 
 struct Shard {            // broken-off icicle
@@ -192,6 +193,7 @@ final class Simulation {
         let tintChanged = cfg.tint != self.cfg.tint
         let capsChanged = cfg.windowDepth != self.cfg.windowDepth || cfg.groundDepth != self.cfg.groundDepth
             || cfg.unlimitedDrifts != self.cfg.unlimitedDrifts
+        if self.cfg.onWindows && !cfg.onWindows { debris.removeAll { $0.sourceSurface != nil } }
         self.cfg = cfg
         tint = (Float(cfg.tint[safe: 0] ?? 1), Float(cfg.tint[safe: 1] ?? 1), Float(cfg.tint[safe: 2] ?? 1))
         var changed = tintChanged || capsChanged
@@ -216,8 +218,9 @@ final class Simulation {
         spans.sort { $0.0 < $1.0 }
         var reach: CGFloat = 0
         for sp in spans where sp.0 <= reach + 12 { reach = max(reach, sp.1) }   // Split View has a small gap
-        fullscreen = cfg.pauseFullscreen && !spans.isEmpty && reach >= size.width - 1
-            && (spans.count == 1 || !menuVisible)
+        let screenSizedWindow = windows.contains { isScreenSized($0.frame.offsetBy(dx: -origin.x, dy: -origin.y)) }
+        fullscreen = cfg.pauseFullscreen && (screenSizedWindow || (!spans.isEmpty && reach >= size.width - 1
+            && (spans.count == 1 || !menuVisible)))
         if fullscreen != wasFull {
             changed = true
             if fullscreen && cfg.fullscreenSnow < 0.02 {
@@ -284,17 +287,11 @@ final class Simulation {
                 if abs(dx) > 0.5 || abs(dy) > 0.5 || resized {
                     let dt = Float(max(1.0 / 60, min(0.5, now - p.lastSeen)))
                     let vel = SIMD2(dx / dt, dy / dt)
-                    let dist = (dx * dx + dy * dy).squareRoot()
-                    if !resized && dist < 4 && p.kind == .window {
-                        // A nudge: the drift rides along, only the loose top layer shakes off.
-                        p.rect = r
-                        shed(p, vel: vel, fraction: min(0.35, dist / 12))
-                    } else {
-                        // Pulled away: the whole drift slides off where the window was.
-                        dump(p, vel: vel)
-                        p.rect = r
-                        if resized { p.resize(binW: Self.binW) }
-                    }
+                    // Even a slow drag releases the drift at its OLD location. Updating the frame
+                    // first made the snow follow the window instead of falling from it.
+                    dump(p, vel: vel)
+                    p.rect = r
+                    if resized { p.resize(binW: Self.binW) }
                     p.lastMove = now
                     windowMoving = true
                     changed = true
@@ -322,7 +319,7 @@ final class Simulation {
         for w in windows {
             let r = w.frame.offsetBy(dx: -origin.x, dy: -origin.y)
             guard r.intersects(bounds) else { continue }
-            if cfg.onWindows {
+            if cfg.onWindows && !isScreenSized(r) {
                 let p = upsert(key: w.id, kind: .window, rect: r)
                 if p.frostSeed == 0 { p.frostSeed = UInt64(truncatingIfNeeded: w.id) &* 0x9E37_79B9_7F4A_7C15 | 1 }
                 if updateVisibility(p, occluders: front) { changed = true }
@@ -376,11 +373,15 @@ final class Simulation {
         if updateLimit(g, windows: Array(front.dropFirst(localOcc.count))) { changed = true }
         order.append(g)
 
-        // Several windows vanishing at once (or anything vanishing around full screen) means a Space
-        // switch, not closing: keep the snow. A single window that disappears was closed or minimized.
-        let vanishedWindows = piles.filter { !seen.contains($0.key) && $0.value.parkedSince == nil && $0.value.kind == .window }.count
-        let spaceSwitch = now < keepVanishedUntil || fullscreen || wasFull || vanishedWindows >= 2
+        // Explicit Space notifications and fullscreen keep the snow. Closing several windows at
+        // once is still a close, so their drifts must fall rather than being parked indefinitely.
+        let spaceSwitch = now < keepVanishedUntil || fullscreen || wasFull || screenSizedWindow
         for (k, p) in piles where !seen.contains(k) {
+            if p.kind == .window && !cfg.onWindows {
+                piles[k] = nil
+                changed = true
+                continue
+            }
             if let since = p.parkedSince {
                 // Gone for good after 4 hours on another Space.
                 if now - since > 4 * 3600 { piles[k] = nil }
@@ -638,7 +639,7 @@ final class Simulation {
             d.vx *= (1 - 0.8 * fdt)
             d.x += d.vx * fdt
             d.y += d.vy * fdt
-            if d.lands, d.vy < 0, !fullscreen, let (p, b) = hit(x: d.x, oldY: oy, newY: d.y) {
+            if d.lands, d.vy < 0, !fullscreen, let (p, b) = hit(x: d.x, oldY: oy, newY: d.y, ignoring: d.sourceSurface) {
                 deposit(p, b, d.size * 0.5)
                 if d.vy < -220 && d.size > 4 && debris.count < 9000 {
                     // Impact: the clump bursts into powder.
@@ -1049,10 +1050,11 @@ final class Simulation {
         }
     }
 
-    private func hit(x: Float, oldY: Float, newY: Float) -> (Pile, Int)? {
+    private func hit(x: Float, oldY: Float, newY: Float, ignoring source: Int? = nil) -> (Pile, Int)? {
         let c = Int(x / Self.columnW)
         guard c >= 0, c < columns.count else { return nil }
         for p in columns[c] {
+            if p.key == source { continue }
             let rel = x - Float(p.rect.minX)
             if rel < 0 || rel >= Float(p.rect.width) { continue }
             let b = Int(rel / Self.binW)
@@ -1123,7 +1125,8 @@ final class Simulation {
                 let spread = 26 / (1 + s * 0.08)
                 debris.append(Debris(x: x + Float.random(in: -2...2), y: top + frac * h,
                                      vx: carry.x * Float.random(in: 0.8...1) + Float.random(in: -spread...spread),
-                                     vy: carry.y + Float.random(in: -8...30) + frac * 14, size: size, alpha: 1, lands: true))
+                                     vy: carry.y + Float.random(in: -8...30) + frac * 14, size: size, alpha: 1, lands: true,
+                                     sourceSurface: p.kind == .window ? p.key : nil))
                 budget -= 1
             }
             i += step
@@ -1137,7 +1140,8 @@ final class Simulation {
             let h = p.bins[k]
             debris.append(Debris(x: x0 + (Float(k) + 0.5) * Self.binW, y: top + h * Float.random(in: 0.4...1.1),
                                  vx: carry.x * 0.45 + Float.random(in: -95...95), vy: Float.random(in: 25...170),
-                                 size: Float.random(in: 1.5...4.5), alpha: 0.9, lands: false, fade: fade))
+                                 size: Float.random(in: 1.5...4.5), alpha: 0.9, lands: false, fade: fade,
+                                 sourceSurface: p.kind == .window ? p.key : nil))
         }
         for (k, ic) in p.icicles.enumerated() where ic.len > 2 && (k < p.icicleVisible.count && p.icicleVisible[k]) {
             shards.append(Shard(x: x0 + ic.x, y: Float(p.rect.minY), vy: min(0, vel.y * 0.3), len: ic.len, width: ic.width))
@@ -1150,30 +1154,16 @@ final class Simulation {
         p.iceDirty = true
     }
 
-    /// A small nudge: part of the top layer shakes off, the rest rides along with the window.
-    private func shed(_ p: Pile, vel: SIMD2<Float>, fraction: Float) {
-        let x0 = Float(p.rect.minX), top = Float(p.rect.maxY)
-        for i in p.bins.indices where p.bins[i] > 0.6 && p.visible[i] {
-            // Edges lose more than the middle.
-            let edge: Float = min(Float(i), Float(p.bins.count - 1 - i)) < 6 ? 2.2 : 1
-            let take = p.bins[i] * min(0.9, fraction * edge)
-            guard take > 0.3 else { continue }
-            p.bins[i] -= take
-            if i % 2 == 0 {
-                debris.append(Debris(x: x0 + (Float(i) + 0.5) * Self.binW, y: top + p.bins[i] + take * 0.5,
-                                     vx: -vel.x * 0.15 + Float.random(in: -25...25), vy: Float.random(in: 10...60),
-                                     size: min(8, 2.2 + take * 0.8), alpha: 1, lands: true))
+    /// The settings' quick preview uses the same visible window drifts as normal snowfall.
+    func addWindowSnow(depth: Float = 12) {
+        guard cfg.onWindows, !fullscreen else { return }
+        for p in landables where p.kind == .window {
+            for i in p.bins.indices where p.visible[i] {
+                let limit = i < p.limit.count ? p.limit[i] : .infinity
+                p.bins[i] = min(p.cap, limit, max(p.bins[i], depth))
             }
+            p.dirty = true
         }
-        if vel.x * vel.x + vel.y * vel.y > 150 * 150 {
-            for (k, ic) in p.icicles.enumerated() where ic.len > 2 && (k < p.icicleVisible.count && p.icicleVisible[k]) {
-                shards.append(Shard(x: x0 + ic.x, y: Float(p.rect.minY), vy: 0, len: ic.len, width: ic.width))
-            }
-            p.icicles = []
-            p.icicleVisible = []
-            p.iceDirty = true
-        }
-        p.dirty = true
     }
 
     private var craftSurfaces: [CraftSurface] {

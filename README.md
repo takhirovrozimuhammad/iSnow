@@ -35,3 +35,7 @@ GitHub Actions runs the workshop physics and fullscreen regression tests, builds
 ## Attribution and license
 
 This customized distribution is based on [iSnow by Filip Hajduch](https://github.com/filiphajduch420/iSnow), released under the MIT License. The original copyright and license remain in [LICENSE](LICENSE), and both LICENSE and [NOTICE.md](NOTICE.md) are included in the app bundle. Interface, original artwork and the hands-on workshop were added for the Ridzhan edition. This project is not endorsed by the upstream author.
+
+## Window snow in 2.1
+
+Settings → Qor qatlamlari → Oynalarga enables snow on regular app windows, including iSnow’s settings window. To‘planishni sinash adds a visible layer immediately for a quick check. Fullscreen windows do not collect snow. Moving a window, even slowly, releases its drift at its old position; released clumps can land on lower windows, but cannot reattach to the source window. Closing multiple windows releases their snow too. Space switches preserve it. Dock preferences are unchanged.

@@ -37,16 +37,16 @@ jobs:
           mkdir -p build/dmg-stage
           ditto build/iSnow.app build/dmg-stage/iSnow.app
           ln -s /Applications build/dmg-stage/Applications
-          hdiutil create -volname iSnow -srcfolder build/dmg-stage -ov -format UDZO build/iSnow-Ridzhan-v2.0.dmg
-          ditto -c -k --sequesterRsrc --keepParent build/iSnow.app build/iSnow-Ridzhan-v2.0.zip
+          hdiutil create -volname iSnow -srcfolder build/dmg-stage -ov -format UDZO build/iSnow-Ridzhan-v2.1.dmg
+          ditto -c -k --sequesterRsrc --keepParent build/iSnow.app build/iSnow-Ridzhan-v2.1.zip
           cd build
-          shasum -a 256 iSnow-Ridzhan-v2.0.dmg > iSnow-Ridzhan-v2.0.dmg.sha256
+          shasum -a 256 iSnow-Ridzhan-v2.1.dmg > iSnow-Ridzhan-v2.1.dmg.sha256
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: iSnow-Ridzhan-macOS
           path: |
-            build/iSnow-Ridzhan-v2.0.*
+            build/iSnow-Ridzhan-v2.1.*
             build/iSnow-icon.png
             build/previews/*.png
             build/native-preview.log

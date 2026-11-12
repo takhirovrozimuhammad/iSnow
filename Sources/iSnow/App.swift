@@ -345,7 +345,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             o.fps = cfg.fps
             o.calmAtLowerRate = cfg.calmLowerRate
             if o.sim.sync(windows: tracker.windows,
-                          occluders: tracker.overlayOccluders + (settingsWindow.flatMap { $0.isVisible ? [$0.frame] : nil } ?? []),
+                          occluders: tracker.overlayOccluders,
                           dock: tracker.dockFrame,
                           icons: tracker.icons, widgets: tracker.widgets, dockEstimated: tracker.dockEstimated,
                           dockAvoid: tracker.dockAvoid,
@@ -627,6 +627,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for o in overlays { o.sim.shakeAll(); o.wake() }
     }
 
+    func addWindowSnow() {
+        for o in overlays { o.sim.addWindowSnow(); o.wake() }
+    }
+
     func prepareSnowWorkshop() {
         settings.config.craftSnow = true
         settings.config.temperature = min(settings.config.temperature, -4)
@@ -685,11 +689,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
+        tracker.ownSettingsWindowNumber = window.windowNumber
+        poll()
     }
 
     /// A closed settings window keeps its whole SwiftUI hierarchy (five tabs of forms, ≈ 10–20 MB) –
     /// free it shortly after closing. Opening the settings again builds a fresh one.
     private func settingsWillClose() {
+        tracker.ownSettingsWindowNumber = nil
+        DispatchQueue.main.async { self.poll() }
         settingsRelease?.cancel()
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { self?.releaseSettingsWindow() }

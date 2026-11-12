@@ -28,6 +28,8 @@ final class Tracker {
     /// Whether the Dock's own window is in the on-screen list. It is missing in a full-screen Space
     /// (see BUGS H1), so this is a hint for full-screen detection. Only meaningful if the Dock does not auto-hide.
     private(set) var dockWindowOnScreen = false
+    /// Include our actual settings window, while excluding our click-through overlays and panels.
+    var ownSettingsWindowNumber: Int?
 
     private var axBusy = false
     private var dockFromAX = false                // dockFrame came from Accessibility, not the estimate
@@ -234,7 +236,7 @@ final class Tracker {
         }
         var rechecked = Set<pid_t>()
         let h = primaryH
-        let frontPID = frontPID == ownPID ? nil : frontPID
+        let frontPID = self.frontPID
         let count = CFArrayGetCount(list)
         var ws: [TrackedWindow] = []
         var occ: [CGRect] = []
@@ -246,7 +248,8 @@ final class Tracker {
         for i in 0..<count {
             guard let item = CFArrayGetValueAtIndex(list, i) else { continue }
             let d = Unmanaged<CFDictionary>.fromOpaque(item).takeUnretainedValue()
-            guard let ownerPID = Self.int(d, kCGWindowOwnerPID), let pid = pid_t(exactly: ownerPID), pid != ownPID,
+            guard let ownerPID = Self.int(d, kCGWindowOwnerPID), let pid = pid_t(exactly: ownerPID),
+                  pid != ownPID || Self.int(d, kCGWindowNumber) == ownSettingsWindowNumber,
                   let layer = Self.int(d, kCGWindowLayer),
                   let b = Self.rect(d, kCGWindowBounds) else { continue }
             if (Self.double(d, kCGWindowAlpha) ?? 1) < 0.05 { continue }
@@ -262,7 +265,7 @@ final class Tracker {
             } else if layer == 0 {
                 // Only regular apps: accessory apps keep invisible helper windows (annotation, dimmers…).
                 guard b.width >= 60, b.height >= 40,
-                      isRegular(pid, recheck: recheck, rechecked: &rechecked),
+                      (pid == ownPID || isRegular(pid, recheck: recheck, rechecked: &rechecked)),
                       let id = Self.int(d, kCGWindowNumber) else { continue }
                 ws.append(TrackedWindow(id: id, frame: r))
                 if active == nil, pid == frontPID { active = r }

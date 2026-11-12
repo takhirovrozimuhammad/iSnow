@@ -98,7 +98,7 @@ struct SettingsView: View {
                     .font(.system(size: 11)).foregroundStyle(.white.opacity(0.48)).lineSpacing(3)
             }
             .padding(14).background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
-            Text("Ridzhan edition  /  2.0").font(.system(size: 10, weight: .medium))
+            Text("Ridzhan edition  /  2.1").font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.white.opacity(0.3)).padding(.top, 20).padding(.bottom, 22)
         }
         .padding(.horizontal, 16)
@@ -345,6 +345,13 @@ private struct DriftTab: View {
         Form {
             Section("Qor qayerga to‘plansin") {
                 Toggle("Oynalarga", isOn: $settings.config.onWindows)
+                HStack {
+                    Text("Oddiy oynalar tepasida qor to‘planadi; siljitsangiz pastga to‘kiladi. Fullscreen oynalarga to‘planmaydi.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("To‘planishni sinash") { delegate.addWindowSnow() }
+                        .disabled(!settings.config.onWindows)
+                }
                 Toggle("Dock ustiga", isOn: $settings.config.onDock)
                 Toggle("Ish stoli ikonlariga", isOn: $settings.config.onIcons)
                 Toggle("Vidjetlarga", isOn: $settings.config.onWidgets)
