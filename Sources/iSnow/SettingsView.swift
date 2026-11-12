@@ -226,7 +226,10 @@ private struct ValueSlider: View {
         LabeledContent {
             HStack {
                 if let step {
-                    Slider(value: $value, in: range, step: step)
+                    Slider(value: Binding(
+                        get: { value },
+                        set: { value = min(range.upperBound, max(range.lowerBound,
+                            range.lowerBound + (($0 - range.lowerBound) / step).rounded() * step)) }), in: range)
                 } else {
                     Slider(value: $value, in: range)
                 }

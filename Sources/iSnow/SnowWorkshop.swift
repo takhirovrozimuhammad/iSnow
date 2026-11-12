@@ -112,6 +112,7 @@ final class SnowWorkshop {
             if dragged != id {
                 dragOffset = SIMD2(balls[i].x, balls[i].y) - p
                 balls[i].parent = nil
+                balls[i].ignoredSupport = nil
             }
             dragged = id
             balls[i].x = p.x + dragOffset.x
@@ -125,6 +126,7 @@ final class SnowWorkshop {
         } else if let i = figures.firstIndex(where: { $0.id == id }) {
             if dragged != id {
                 dragOffset = SIMD2(figures[i].snowman.anchorX, figures[i].snowman.baseY) - p
+                figures[i].ignoredSupport = nil
             }
             dragged = id
             figures[i].snowman.anchorX = p.x + dragOffset.x
