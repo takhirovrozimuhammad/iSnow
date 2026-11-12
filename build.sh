@@ -45,12 +45,14 @@ mv "$BIN" "$APP/Contents/MacOS/iSnow"
 strip -x "$APP/Contents/MacOS/iSnow"
 cp Info.plist "$APP/Contents/Info.plist"
 cp -R Resources/*.lproj "$APP/Contents/Resources/"
+cp LICENSE NOTICE.md "$APP/Contents/Resources/"
 
 # The icon is generated; regenerate it when scripts/make-icon.swift changed.
-if [[ ! -f build/AppIcon.icns || scripts/make-icon.swift -nt build/AppIcon.icns ]]; then
+if [[ ! -f build/AppIcon.icns || scripts/make-icon.swift -nt build/AppIcon.icns || Sources/iSnow/BrandMark.swift -nt build/AppIcon.icns ]]; then
   echo "Generating the app icon…"
   rm -rf build/AppIcon.iconset
-  swift scripts/make-icon.swift build
+  swiftc Sources/iSnow/BrandMark.swift scripts/make-icon.swift -o build/make-icon
+  build/make-icon build
   iconutil -c icns build/AppIcon.iconset -o build/AppIcon.icns
   rm -rf build/AppIcon.iconset
 fi

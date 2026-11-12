@@ -1,0 +1,53 @@
+name: iSnow macOS
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+concurrency:
+  group: isnow-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test rolling, stacking, surfaces and fullscreen
+        run: set -o pipefail; swift test 2>&1 | tee test-results.log
+      - name: Build Apple silicon and Intel app
+        run: zsh build.sh
+      - name: Verify bundle, signing and native settings
+        run: |
+          codesign --verify --strict build/iSnow.app
+          lipo -archs build/iSnow.app/Contents/MacOS/iSnow | grep 'arm64'
+          lipo -archs build/iSnow.app/Contents/MacOS/iSnow | grep 'x86_64'
+          test -f build/iSnow.app/Contents/Resources/LICENSE
+          test -f build/iSnow.app/Contents/Resources/NOTICE.md
+          build/iSnow.app/Contents/MacOS/iSnow --studio-preview build/previews > build/native-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          for attempt in {1..40}; do
+            if ! kill -0 "$PREVIEW_PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if kill -0 "$PREVIEW_PID" 2>/dev/null; then kill "$PREVIEW_PID"; exit 1; fi
+          wait "$PREVIEW_PID"
+          test -s build/previews/iSnow-workshop.png
+          test -s build/previews/iSnow-snowfall.png
+      - name: Package installable app
+        run: |
+          mkdir -p build/dmg-stage
+          ditto build/iSnow.app build/dmg-stage/iSnow.app
+          ln -s /Applications build/dmg-stage/Applications
+          hdiutil create -volname iSnow -srcfolder build/dmg-stage -ov -format UDZO build/iSnow-Ridzhan-v2.0.dmg
+          ditto -c -k --sequesterRsrc --keepParent build/iSnow.app build/iSnow-Ridzhan-v2.0.zip
+          cd build
+          shasum -a 256 iSnow-Ridzhan-v2.0.dmg > iSnow-Ridzhan-v2.0.dmg.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iSnow-Ridzhan-macOS
+          path: |
+            build/iSnow-Ridzhan-v2.0.*
+            build/iSnow-icon.png
+            build/previews/*.png
+            build/native-preview.log
+            test-results.log

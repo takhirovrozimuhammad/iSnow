@@ -29,6 +29,8 @@ struct Snowman {
     var loose: [LooseBall] = []
     var carrot: Carrot?
     var sizeScale: Float = 1
+    /// The three exact balls rolled by the user; accessories scale with the base ball.
+    var handmadeRadii: [Float]?
     var rebuildDelay: Float = 120
     var throwEvery: Float = 30
     var temperature: Float = -4
@@ -47,6 +49,7 @@ struct Snowman {
     var lookAt: SIMD2<Float>?        // the cursor – the eyes follow it
 
     @inline(__always) func R(_ k: Int) -> Float {
+        if let custom = handmadeRadii, custom.indices.contains(k) { return custom[k] * scale }
         let r = k == 0 ? Self.radii.0 : (k == 1 ? Self.radii.1 : Self.radii.2)
         return r * scale * sizeScale
     }
@@ -320,9 +323,9 @@ struct Snowman {
                 }
                 if levels >= 3, let h = ball(2), let m = ball(1) {
                     // scarf
-                    let red: RGBA = (0.85, 0.17, 0.22, a)
+                    let red: RGBA = (0.62, 0.51, 0.98, a)
                     let neckY = (h.y - h.r * 0.75 + m.y + m.r * 0.75) / 2
-                    Mesh.rect(&out, x: m.x - m.r * 0.78, y: neckY - 1.8 * s, w: m.r * 1.56, h: 3.6 * s, top: red, bottom: (0.7, 0.1, 0.16, a))
+                    Mesh.rect(&out, x: m.x - m.r * 0.78, y: neckY - 1.8 * s, w: m.r * 1.56, h: 3.6 * s, top: red, bottom: (0.35, 0.29, 0.76, a))
                     let sway = sin(t * 2.2) * 1.2 * s
                     Mesh.line(&out, (m.x + m.r * 0.45, neckY), (m.x + m.r * 0.62 + sway, neckY - 9 * s), width: 3 * s, color: red)
                     // eyes and mouth

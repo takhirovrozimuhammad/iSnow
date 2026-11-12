@@ -8,10 +8,10 @@ enum Intensity: Int, CaseIterable, Identifiable, Sendable {
     var id: Int { rawValue }
     var title: String {
         switch self {
-        case .light: String(localized: "Flurry")
-        case .normal: String(localized: "Normal")
-        case .blizzard: String(localized: "Blizzard")
-        case .storm: String(localized: "Snowstorm")
+        case .light: String(localized: "Yengil")
+        case .normal: String(localized: "Sokin")
+        case .blizzard: String(localized: "Bo‘ron")
+        case .storm: String(localized: "Qattiq bo‘ron")
         }
     }
     var density: Double { [0.45, 1.25, 4.0, 8.1][rawValue] }
@@ -73,6 +73,8 @@ struct SimConfig: Codable, Equatable, Sendable {
     var lightsWhilePaused = false      // keep the Christmas lights twinkling while the snow is paused
     // Other
     var mouse = true
+    var craftSnow = true               // Option rolls real drift snow into a ball; Option+Shift shovels
+    var workMode = false               // effective settings are capped without overwriting the user's sliders
     var frost = false
     var pauseFullscreen = true         // detect full-screen apps (hide decorations there)
     var fullscreenSnow: Double = 0.3   // opacity of the snowfall over full-screen apps (0 = no snow)
@@ -88,7 +90,7 @@ struct SimConfig: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case density, maxFlakes, flakeSize, fallSpeed, wind, sparkle, tint, onWindows, onDock, onIcons, onWidgets, onMenuBar,
              unlimitedDrifts, windowDepth, groundDepth, accumulation, temperature, windowFrost, icicles, icicleLength, snowman,
-             snowmanSize, snowmanCount, snowmanGhost,
+             snowmanSize, snowmanCount, snowmanGhost, craftSnow, workMode,
              snowmanBreak, snowballs, throwEvery, christmas, christmasTree, christmasGarland, christmasHats, lightStyle,
              treeSize, lightSize, lightGlow, santa, skier, skierEvery, skierInterval, skierCount, snowplow, autoPlow, autoPlowEvery, autoPlowHeight, lightsWhilePaused, calmActive, fahrenheit, batterySaver, retina, hideFromCapture, mouse, frost, pauseFullscreen, fullscreenSnow, fps, calmLowerRate
     }
@@ -261,11 +263,6 @@ final class Settings {
     private(set) var loginError: String?
 
     private init() {
-        // Carry settings over from the app's previous name (Vločka).
-        if UserDefaults.standard.data(forKey: "config") == nil,
-           let old = UserDefaults(suiteName: "local.vlocka.app")?.data(forKey: "config") {
-            UserDefaults.standard.set(old, forKey: "config")
-        }
         config = SimConfig.load(from: .standard)
         refreshLoginStatus()
     }

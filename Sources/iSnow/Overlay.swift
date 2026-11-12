@@ -39,6 +39,8 @@ final class Overlay: NSObject {
         didSet {
             guard suspended != oldValue else { return }
             if suspended {
+                sim.workshop.finishRolling()
+                for panel in workshopPanels.values { panel.update(nil) }
                 sleep()
                 releaseGPUMemory()
             } else if !hidden {
@@ -60,6 +62,9 @@ final class Overlay: NSObject {
     private var fullRate = true
     /// When the simulation started to report that nothing fast is on screen (0 = it currently does).
     private var calmSince: CFTimeInterval = 0
+    private var workshopPanels: [UUID: SnowmanPanel] = [:]
+    private var optionHeld: Double = 0
+    private var captureHidden = false
 
     static func displayID(of screen: NSScreen) -> CGDirectDisplayID {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
@@ -164,6 +169,8 @@ final class Overlay: NSObject {
     func setHiddenFromCapture(_ on: Bool) {
         let t: NSWindow.SharingType = on ? .none : .readOnly
         if window.sharingType != t { window.sharingType = t }
+        captureHidden = on
+        for panel in workshopPanels.values { panel.setHiddenFromCapture(on) }
     }
 
     /// Hide all effects (the simulation keeps its state) or bring them back.
@@ -171,6 +178,8 @@ final class Overlay: NSObject {
         guard on != hidden else { return }
         hidden = on
         if on {
+            sim.workshop.finishRolling()
+            for panel in workshopPanels.values { panel.update(nil) }
             sleep()
             releaseGPUMemory()          // while still ordered in, so the empty frame is taken
             window.orderOut(nil)
@@ -190,6 +199,8 @@ final class Overlay: NSObject {
     func sleep() { link?.isPaused = true }
 
     func close() {
+        for panel in workshopPanels.values { panel.close() }
+        workshopPanels.removeAll()
         link?.invalidate()
         link = nil
         window.orderOut(nil)
@@ -204,8 +215,12 @@ final class Overlay: NSObject {
         let local = CGPoint(x: m.x - sim.origin.x, y: m.y - sim.origin.y)
         let inside = local.x >= 0 && local.y >= 0 && local.x <= sim.size.width && local.y <= sim.size.height
         let mods = NSEvent.modifierFlags
-        let shovel = mods.contains(.option)
-        sim.step(dt: dt, now: CACurrentMediaTime(), mouse: inside ? local : nil, shovel: shovel)
+        let option = mods.contains(.option) && !mods.contains(.command) && !mods.contains(.control)
+        optionHeld = option ? optionHeld + dt : 0
+        let shovel = option && (mods.contains(.shift) || !sim.optionRollsSnow)
+        let craft = optionHeld > 0.25 && !shovel
+        sim.step(dt: dt, now: CACurrentMediaTime(), mouse: inside ? local : nil, shovel: shovel, craft: craft)
+        refreshWorkshopPanels()
         updateRate(now: now)
         particles.removeAll(keepingCapacity: true)
         mesh.removeAll(keepingCapacity: true)
@@ -215,7 +230,41 @@ final class Overlay: NSObject {
         let t = Mesh.tint
         renderer.tint = SIMD3(t.0, t.1, t.2)
         renderer.draw(layer: view.metalLayer, size: view.bounds.size, particles: particles, mesh: mesh, buffers: &buffers)
-        if !sim.isAnimating || hidden || suspended { link.isPaused = true }
+        if (!sim.isAnimating && !option) || hidden || suspended { link.isPaused = true }
+    }
+
+    /// One tiny click target per creation. The full-screen snowfall remains click-through.
+    func refreshWorkshopPanels() {
+        let targets = hidden || suspended ? [] : sim.workshopTargets
+        let ids = Set(targets.map(\.id))
+        for id in Array(workshopPanels.keys) where !ids.contains(id) {
+            workshopPanels.removeValue(forKey: id)?.close()
+        }
+        for target in targets {
+            let panel: SnowmanPanel
+            if let existing = workshopPanels[target.id] { panel = existing } else {
+                panel = SnowmanPanel()
+                let id = target.id
+                panel.onClick = { [weak self] p in
+                    guard let self else { return }
+                    sim.clickCraft(id, at: localPoint(p)); wake()
+                }
+                panel.onDrag = { [weak self] p in
+                    guard let self else { return }
+                    let p = localPoint(p)
+                    sim.workshop.drag(id, to: SIMD2(Float(p.x), Float(p.y))); wake()
+                }
+                panel.onDrop = { [weak self] _ in self?.sim.workshop.drop(id); self?.wake() }
+                panel.setHiddenFromCapture(captureHidden)
+                workshopPanels[id] = panel
+            }
+            panel.update(target.rect.offsetBy(dx: sim.origin.x, dy: sim.origin.y))
+        }
+    }
+
+    private func localPoint(_ global: CGPoint) -> CGPoint {
+        CGPoint(x: min(max(global.x - sim.origin.x, 4), sim.size.width - 4),
+                y: min(max(global.y - sim.origin.y, 4), sim.size.height - 4))
     }
 }
 
@@ -261,11 +310,12 @@ final class SnowmanPanel {
 
     /// `rect` in global coordinates, nil = hide.
     func update(_ rect: CGRect?) {
-        if view.dragging { return }            // keep the panel still while dragging
         guard let rect else {
+            view.cancelInteraction()
             if panel.isVisible { panel.orderOut(nil) }
             return
         }
+        if view.dragging { return }            // keep the panel still while dragging
         if abs(panel.frame.minX - rect.minX) > 1 || abs(panel.frame.minY - rect.minY) > 1
             || abs(panel.frame.width - rect.width) > 1 || abs(panel.frame.height - rect.height) > 1 {
             panel.setFrame(rect, display: false)
@@ -273,7 +323,7 @@ final class SnowmanPanel {
         if !panel.isVisible { panel.orderFrontRegardless() }
     }
 
-    func close() { panel.orderOut(nil) }
+    func close() { view.cancelInteraction(); panel.orderOut(nil) }
 
     final class ClickView: NSView {
         var onClick: ((CGPoint) -> Void)?
@@ -281,12 +331,14 @@ final class SnowmanPanel {
         var onDrop: ((CGPoint) -> Void)?
         private(set) var dragging = false
         private var start: CGPoint = .zero
+        private var holding = false
 
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
         override func mouseDown(with event: NSEvent) {
             start = NSEvent.mouseLocation
             dragging = false
+            holding = true
             NSCursor.closedHand.push()
         }
 
@@ -297,6 +349,8 @@ final class SnowmanPanel {
         }
 
         override func mouseUp(with event: NSEvent) {
+            guard holding else { return }
+            holding = false
             NSCursor.pop()
             let p = NSEvent.mouseLocation
             if dragging {
@@ -308,5 +362,12 @@ final class SnowmanPanel {
         }
 
         override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+
+        func cancelInteraction() {
+            guard holding else { return }
+            holding = false
+            NSCursor.pop()
+            if dragging { dragging = false; onDrop?(NSEvent.mouseLocation) }
+        }
     }
 }

@@ -116,6 +116,7 @@ final class Simulation {
     private var garlandCache = Christmas.LightCache()
     private var treeCache = Christmas.LightCache()
     var snowmen: [Snowman] = []
+    let workshop = SnowWorkshop()
     private var windowRects: [(key: Int, rect: CGRect)] = []   // front to back
     private var dockLocal: CGRect?
     private var treePos: (x: Float, y: Float)?
@@ -552,7 +553,7 @@ final class Simulation {
 
     // MARK: - Simulation step
 
-    func step(dt: Double, now: Double, mouse: CGPoint? = nil, shovel: Bool = false) {
+    func step(dt: Double, now: Double, mouse: CGPoint? = nil, shovel: Bool = false, craft: Bool = false) {
         time += dt
         let fdt = Float(dt)
         mouseLocal = mouse.map { SIMD2(Float($0.x), Float($0.y)) }
@@ -569,13 +570,17 @@ final class Simulation {
             }
         }
         shovelAt = nil
+        let canCraft = cfg.craftSnow && !fullscreen && cfg.temperature <= 0
+        workshop.roll(at: mouseLocal, active: canCraft && craft) { p, reach, budget in
+            self.collectCraftSnow(at: p, reach: reach, budget: budget)
+        }
         if cfg.mouse, let mouse {
             let m = SIMD2(Float(mouse.x), Float(mouse.y))
             if shovelHeld > 0.25 {
                 shovelAt = m                 // the shovel follows the cursor while ⌥ is held
                 stepShovel(m, dt: fdt)
             }
-            stepMouse(m, dt: fdt)
+            if !craft { stepMouse(m, dt: fdt) }
         } else { lastMouse = nil }
         let acc = Float(cfg.accumulation)
         let temp = Float(cfg.temperature)
@@ -784,6 +789,11 @@ final class Simulation {
         }
 
         if hostsSnowman { stepSnowmen(dt: fdt); stepSanta(dt: fdt) }
+        if !fullscreen && workshop.hasCreations {
+            workshop.step(dt: fdt, surfaces: craftSurfaces, mouse: mouseLocal, temperature: Float(cfg.temperature),
+                          paused: cfg.paused, debris: &debris, shards: &shards)
+            workshop.updateVisibility(occluders: localOcc, windows: windowRects)
+        }
         if hostsSnowman && cfg.snowplow && !cfg.paused && !fullscreen {
             // Every couple of seconds: is the snow at the bottom high enough to call the plow?
             nextAutoPlow -= dt
@@ -907,6 +917,7 @@ final class Simulation {
         if !debris.isEmpty || !snowballs.isEmpty || windowMoving || time < kickedUntil { return true }
         // Everything else is mesh, which is not drawn over a full-screen app.
         if fullscreen { return false }
+        if workshop.isMoving { return true }
         if !shards.isEmpty || !skiers.isEmpty || plow.visible || santa != nil || shovelAt != nil { return true }
         if !queuedSkiers.isEmpty && !cfg.paused { return true }        // the rest of a group about to set off
         guard hostsSnowman else { return false }
@@ -922,6 +933,7 @@ final class Simulation {
             // Faded snow keeps falling over full-screen apps (unless set to none).
             return (!cfg.paused && cfg.fullscreenSnow >= 0.02) || !flakes.isEmpty || !debris.isEmpty
         }
+        if workshop.isMoving { return true }
         if !skiers.isEmpty || !queuedSkiers.isEmpty { return true }
         // Paused: the lights only keep twinkling if the user wants that.
         if cfg.christmas && cfg.lightsWhilePaused && (cfg.christmasGarland || treePos != nil) { return true }
@@ -1162,6 +1174,54 @@ final class Simulation {
             p.iceDirty = true
         }
         p.dirty = true
+    }
+
+    private var craftSurfaces: [CraftSurface] {
+        landables.map { p in
+            CraftSurface(key: p.key, rect: p.rect,
+                         heights: p.bins.indices.map { min(p.bins[$0], $0 < p.limit.count ? p.limit[$0] : .infinity) },
+                         visible: p.visible, binWidth: Self.binW)
+        }
+    }
+
+    private func collectCraftSnow(at point: SIMD2<Float>, reach: Float, budget: Float) -> Float {
+        var area: Float = 0
+        for p in landables {
+            let left = Float(p.rect.minX), base = Float(p.rect.maxY)
+            guard point.y + reach >= base, point.x + reach >= left,
+                  point.x - reach <= Float(p.rect.maxX) else { continue }
+            for i in p.bins.indices where p.visible[i] {
+                let x = left + (Float(i) + 0.5) * Self.binW
+                let height = min(p.bins[i], i < p.limit.count ? p.limit[i] : .infinity)
+                guard height > 0, abs(x - point.x) <= reach,
+                      point.y - reach <= base + height, point.y + reach >= base else { continue }
+                let take = min(height, max(0, budget - area) / Self.binW)
+                guard take > 0 else { return area }
+                p.bins[i] -= take
+                p.dirty = true
+                area += take * Self.binW
+                if area >= budget - 0.01 { return area }
+            }
+        }
+        return area
+    }
+
+    /// A visible strip of real snow for practising without waiting for a long snowfall.
+    func prepareWorkshop() {
+        for p in landables where p.kind == .ground || p.kind == .dock {
+            for i in p.bins.indices where p.visible[i] {
+                let limit = i < p.limit.count ? p.limit[i] : .infinity
+                p.bins[i] = min(p.cap, limit, max(p.bins[i], p.kind == .ground ? 30 : 22))
+            }
+            p.dirty = true
+        }
+    }
+
+    var workshopTargets: [SnowWorkshop.Target] { fullscreen ? [] : workshop.targets }
+    var optionRollsSnow: Bool { cfg.craftSnow }
+
+    func clickCraft(_ id: UUID, at p: CGPoint) {
+        workshop.click(id, at: SIMD2(Float(p.x), Float(p.y)), debris: &debris)
     }
 
     /// Shovel the snow off the bottom edge and the Dock (menu action).
@@ -1638,6 +1698,7 @@ final class Simulation {
             }
         }
         if hostsSnowman { for s in snowmen where !s.hidden { s.build(into: &out) } }
+        workshop.build(into: &out)
         for s in skiers where !localOcc.contains(where: { $0.contains(CGPoint(x: CGFloat(s.x), y: CGFloat(s.y + 10))) }) {
             s.build(into: &out, t: drawTime)
         }

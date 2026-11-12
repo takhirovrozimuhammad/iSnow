@@ -8,6 +8,7 @@ let package = Package(
         .executableTarget(
             name: "iSnow",
             path: "Sources/iSnow"
-        )
+        ),
+        .testTarget(name: "iSnowTests", dependencies: ["iSnow"], path: "Tests/iSnowTests")
     ]
 )

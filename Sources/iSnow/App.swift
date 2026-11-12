@@ -9,8 +9,11 @@ struct ISnowApp: App {
     @State private var state = AppState.shared
 
     var body: some Scene {
-        MenuBarExtra("iSnow", systemImage: settings.paused || state.hidden ? "snowflake.slash" : "snowflake") {
+        MenuBarExtra {
             MenuContent(settings: settings, state: state, delegate: delegate)
+        } label: {
+            Image(nsImage: ISnowBrand.image(size: 18, template: true))
+                .opacity(settings.paused || state.hidden ? 0.45 : 1)
         }
         .menuBarExtraStyle(.menu)
     }
@@ -28,14 +31,14 @@ struct MenuContent: View {
             if let until = state.hiddenUntil {
                 Button("Show Effects (until \(until.formatted(date: .omitted, time: .shortened)))") { delegate.showEffects() }
             } else {
-                Button("Show Effects") { delegate.showEffects() }
+                Button("Effektlarni ko‘rsatish") { delegate.showEffects() }
             }
         } else {
-            Menu("Hide Effects") {
-                Button("For 15 Minutes") { delegate.hideEffects(until: Date().addingTimeInterval(15 * 60)) }
-                Button("For 1 Hour") { delegate.hideEffects(until: Date().addingTimeInterval(3600)) }
-                Button("Until Tomorrow") { delegate.hideEffects(until: AppState.nextMorning()) }
-                Button("Until I Turn Them Back On") { delegate.hideEffects(until: nil) }
+            Menu("Effektlarni yashirish") {
+                Button("15 daqiqaga") { delegate.hideEffects(until: Date().addingTimeInterval(15 * 60)) }
+                Button("1 soatga") { delegate.hideEffects(until: Date().addingTimeInterval(3600)) }
+                Button("Ertagacha") { delegate.hideEffects(until: AppState.nextMorning()) }
+                Button("O‘zim yoqqunimcha") { delegate.hideEffects(until: nil) }
             }
         }
         if state.fullscreenPaused && !state.hidden {
@@ -43,12 +46,12 @@ struct MenuContent: View {
                                                          : LocalizedStringKey("Light snow – full-screen app"))
         }
         if state.batterySaverActive && !state.hidden {
-            Text("Battery saver on")
+            Text("Quvvat tejash yoqilgan")
         }
         Divider()
-        Toggle("Snowing", isOn: Binding(get: { !settings.paused }, set: { settings.paused = !$0 }))
+        Toggle("Qor yog‘ishi", isOn: Binding(get: { !settings.paused }, set: { settings.paused = !$0 }))
             .keyboardShortcut("s")
-        Picker("Intensity", selection: Binding<Intensity?>(
+        Picker("Qor zichligi", selection: Binding<Intensity?>(
             get: { settings.config.preset },
             set: { if let p = $0 { settings.config.apply(p) } })) {
             ForEach(Intensity.allCases) { Text($0.title).tag(Optional($0)) }
@@ -63,27 +66,29 @@ struct MenuContent: View {
             }
         }
         Divider()
-        Toggle("Snow on Windows", isOn: $settings.config.onWindows)
-        Toggle("Snow on Widgets", isOn: $settings.config.onWidgets)
-        Toggle("Snow on the Dock", isOn: $settings.config.onDock)
-        Toggle("Snowman", isOn: $settings.config.snowman)
-        Toggle("Christmas Mode", isOn: $settings.config.christmas)
-        Toggle("Cursor Scatters Snow", isOn: $settings.config.mouse)
+        Toggle("Oynalarda qor", isOn: $settings.config.onWindows)
+        Toggle("Vidjetlarda qor", isOn: $settings.config.onWidgets)
+        Toggle("Dock’da qor", isOn: $settings.config.onDock)
+        Toggle("Avtomatik qor odam", isOn: $settings.config.snowman)
+        Toggle("Ish rejimi", isOn: $settings.config.workMode)
+        Button("Qor odamni o‘zim yasayman…") { delegate.prepareSnowWorkshop(); delegate.showSettings(tab: 2) }
+        Toggle("Bayram rejimi", isOn: $settings.config.christmas)
+        Toggle("Kursor qorni sochsin", isOn: $settings.config.mouse)
         if !settings.axTrusted && (settings.config.onDock || settings.config.onIcons || settings.config.snowman) {
-            Text("Dock position is estimated")
-            Button("Allow Snow on the Dock and Icons…") { Tracker.requestAccessibility() }
+            Text("Dock joyi taxminiy")
+            Button("Dock va ikonlar uchun ruxsat…") { Tracker.requestAccessibility() }
         }
         Divider()
         if settings.config.christmas {
-            Button("Send Santa") { delegate.launchSanta() }
+            Button("Qorboboni chaqirish") { delegate.launchSanta() }
                 .disabled(state.hidden)
         }
-        Button("Shake Off All Snow") { delegate.shakeAll() }
-        Button("Shovel Snow at the Bottom") { delegate.shovelBottom() }
-        Button("Settings…") { delegate.showSettings() }
+        Button("Qorlarni silkitish") { delegate.shakeAll() }
+        Button("Pastdagi qorni tozalash") { delegate.shovelBottom() }
+        Button("Sozlamalar…") { delegate.showSettings() }
             .keyboardShortcut(",")
         Divider()
-        Button("Quit iSnow") { NSApp.terminate(nil) }
+        Button("iSnow’dan chiqish") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
     }
 }
@@ -113,6 +118,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static weak var current: AppDelegate?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if let i = CommandLine.arguments.firstIndex(of: "--studio-preview"), i + 1 < CommandLine.arguments.count {
+            StudioPreview.run(directory: CommandLine.arguments[i + 1], delegate: self)
+            return
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--promo"), i + 1 < CommandLine.arguments.count {
             // Render the README screenshots (desktop scenes and the settings window), then quit.
             Promo.run(dir: CommandLine.arguments[i + 1], delegate: self)
@@ -338,9 +347,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           // Dock's own window disappears – treat that as "no menu bar" for full-screen detection.
                           menuBars: tracker.dockWindowOnScreen ? tracker.menuBars : [],
                           activeWindow: tracker.activeWindow,
-                          now: now, cfg: cfg) || o.sim.isAnimating {
+                          now: now, cfg: cfg) || o.sim.isAnimating || NSEvent.modifierFlags.contains(.option) {
                 o.wake()
             }
+            o.refreshWorkshopPanels()
         }
         let full = overlays.contains { $0.sim.isFullscreenPaused }
         if state.fullscreenPaused != full { state.fullscreenPaused = full }
@@ -471,6 +481,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The settings as the simulations get them: lighter on battery and in Low Power Mode.
     private func effectiveConfig() -> SimConfig {
         var c = settings.config
+        if c.workMode {
+            c.density = min(c.density, 0.4)
+            c.maxFlakes = min(c.maxFlakes, 250)
+            c.fps = min(c.fps, 30)
+            c.sparkle = false
+            c.calmActive = true
+            c.fullscreenSnow = min(c.fullscreenSnow, 0.1)
+            c.snowman = false
+            c.skier = false
+            c.santa = false
+        }
         if state.batterySaverActive {
             c.fps = min(c.fps, 30)
             c.maxFlakes = min(c.maxFlakes, 500)
@@ -600,6 +621,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for o in overlays { o.sim.shakeAll(); o.wake() }
     }
 
+    func prepareSnowWorkshop() {
+        settings.config.craftSnow = true
+        settings.config.temperature = min(settings.config.temperature, -4)
+        settings.paused = false
+        if state.hidden { showEffects() }
+        for o in overlays { o.sim.prepareWorkshop(); o.wake() }
+    }
+
+    func clearSnowWorkshop() {
+        for o in overlays { o.sim.workshop.clear(); o.refreshWorkshopPanels(); o.wake() }
+    }
+
+    func showLicenses() {
+        if let url = Bundle.main.url(forResource: "NOTICE", withExtension: "md") { NSWorkspace.shared.open(url) }
+    }
+
     // MARK: - Settings window
 
     /// Opens the settings (or brings them to the front) on the given tab.
@@ -622,11 +659,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             host.sizingOptions = []
             let w = NSWindow(contentViewController: host)
             w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-            w.title = String(localized: "iSnow Settings")
+            w.title = "iSnow · Winter Studio"
+            w.titlebarAppearsTransparent = true
+            w.backgroundColor = NSColor(red: 0.055, green: 0.068, blue: 0.13, alpha: 1)
+            w.appearance = NSAppearance(named: .darkAqua)
             w.isReleasedWhenClosed = false
-            w.setContentSize(NSSize(width: 500, height: 640))
-            w.contentMinSize = NSSize(width: 500, height: 380)
-            w.contentMaxSize = NSSize(width: 500, height: 2000)
+            w.setContentSize(NSSize(width: 900, height: 760))
+            w.contentMinSize = NSSize(width: 860, height: 660)
+            w.contentMaxSize = NSSize(width: 1200, height: 1400)
             w.center()
             settingsWindow = w
             settingsHost = host

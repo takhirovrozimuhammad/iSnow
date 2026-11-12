@@ -3,39 +3,213 @@ import ServiceManagement
 import SwiftUI
 
 private typealias R = SimConfig.Ranges
+private enum WinterStyle {
+    static let ink = Color(red: 0.055, green: 0.068, blue: 0.13)
+    static let panel = Color(red: 0.085, green: 0.10, blue: 0.18)
+    static let accent = Color(red: 0.64, green: 0.65, blue: 1)
+    static let ice = Color(red: 0.68, green: 0.82, blue: 1)
+}
 
 struct SettingsView: View {
     @Bindable var settings: Settings
     let delegate: AppDelegate
     @State private var tab: Int
     private let activates: Bool
+    private let titles = ["Qor yog‘ishi", "Qor qatlamlari", "Qor ustaxonasi", "Bayram kayfiyati", "Ish va quvvat"]
+    private let icons = ["cloud.snow", "mountain.2", "hand.draw", "sparkles", "moon.stars"]
+    private let descriptions = ["Derazangiz ortidagi qish — endi butun ekraningizda.",
+        "Qor har bir deraza va Dock ustida o‘z joyini topsin.",
+        "Qorni o‘z qo‘lingiz bilan yig‘ing. O‘z qor odamingizni yasang.",
+        "Chiroqlar, archa va biroz bayram sehridan qo‘shing.",
+        "Ish paytida sokinroq, batareyada yengilroq."]
 
     init(settings: Settings, delegate: AppDelegate, tab: Int = 0, activates: Bool = true) {
         self.settings = settings
         self.delegate = delegate
-        _tab = State(initialValue: tab)
+        _tab = State(initialValue: min(max(tab, 0), 4))
         self.activates = activates
     }
 
     var body: some View {
-        TabView(selection: $tab) {
-            SnowTab(settings: settings).tabItem { Label("Snowfall", systemImage: "cloud.snow") }.tag(0)
-            DriftTab(settings: settings, delegate: delegate).tabItem { Label("Drifts", systemImage: "mountain.2") }.tag(1)
-            SnowmanTab(settings: settings, delegate: delegate).tabItem { Label("Snowman", systemImage: "figure.wave") }.tag(2)
-            ChristmasTab(settings: settings, delegate: delegate).tabItem { Label("Christmas", systemImage: "gift") }.tag(3)
-            ExtrasTab(settings: settings, delegate: delegate).tabItem { Label("Other", systemImage: "sparkles") }.tag(4)
+        HStack(spacing: 0) {
+            sidebar
+            VStack(spacing: 0) {
+                header
+                selectedTab
+                    .scrollContentBackground(.hidden)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .id(tab)
+                footer
+            }
+            .background(WinterStyle.ink)
         }
-        .frame(width: 500)
+        .frame(minWidth: 860, minHeight: 660)
+        .tint(WinterStyle.accent)
+        .preferredColorScheme(.dark)
         .onAppear {
             settings.refreshLoginStatus()
             guard activates else { return }
             NSApp.activate()
-            DispatchQueue.main.async { NSApp.windows.first { $0.isVisible && $0.canBecomeKey }?.makeKeyAndOrderFront(nil) }
         }
-        // The login item can be approved or removed in System Settings while the window is open.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             settings.refreshLoginStatus()
         }
+    }
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Image(nsImage: ISnowBrand.image(size: 52)).resizable().frame(width: 48, height: 48)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("iSnow").font(.system(size: 25, weight: .semibold, design: .rounded))
+                    Text("WINTER STUDIO").font(.system(size: 8, weight: .bold)).tracking(2.2)
+                        .foregroundStyle(WinterStyle.ice.opacity(0.65))
+                }
+            }
+            .padding(.top, 28).padding(.bottom, 32)
+            ForEach(0..<5, id: \.self) { index in
+                Button {
+                    withAnimation(.easeOut(duration: 0.16)) { tab = index }
+                } label: {
+                    HStack(spacing: 11) {
+                        Image(systemName: icons[index]).font(.system(size: 16)).frame(width: 21)
+                        Text(titles[index]).font(.system(size: 12, weight: tab == index ? .semibold : .medium))
+                        Spacer(minLength: 0)
+                        if tab == index { Circle().fill(WinterStyle.accent).frame(width: 5, height: 5) }
+                    }
+                    .foregroundStyle(tab == index ? Color.white : Color.white.opacity(0.57))
+                    .padding(.horizontal, 12).padding(.vertical, 14)
+                    .background(tab == index ? WinterStyle.accent.opacity(0.14) : .clear,
+                                in: RoundedRectangle(cornerRadius: 12))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).padding(.bottom, 5)
+            }
+            Spacer(minLength: 20)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("⌥").font(.system(size: 20, weight: .medium, design: .rounded))
+                        .frame(width: 36, height: 32)
+                        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                    Text("Qish qo‘lingizda").font(.system(size: 11, weight: .semibold))
+                }
+                Text("Option’ni bosib qorni yurgizing. Uchta sharni ustma-ust qo‘ying.")
+                    .font(.system(size: 11)).foregroundStyle(.white.opacity(0.48)).lineSpacing(3)
+            }
+            .padding(14).background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
+            Text("Ridzhan edition  /  2.0").font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.white.opacity(0.3)).padding(.top, 20).padding(.bottom, 22)
+        }
+        .padding(.horizontal, 16)
+        .frame(width: 190)
+        .background(WinterStyle.panel)
+        .overlay(alignment: .trailing) { Rectangle().fill(.white.opacity(0.05)).frame(width: 1) }
+    }
+
+    private var header: some View {
+        ZStack(alignment: .leading) {
+            WinterLandscape(paused: settings.paused)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("SHOSHILMANG. QISHNI HIS QILING.")
+                    .font(.system(size: 9, weight: .bold)).tracking(2).foregroundStyle(WinterStyle.ice)
+                Text(titles[tab]).font(.system(size: 30, weight: .medium, design: .rounded))
+                Text(descriptions[tab]).font(.system(size: 12)).foregroundStyle(.white.opacity(0.62))
+                    .frame(maxWidth: 420, alignment: .leading)
+                HStack(spacing: 7) {
+                    Circle().fill(settings.paused ? .gray : WinterStyle.ice).frame(width: 5, height: 5)
+                    Text(settings.paused ? "Qor to‘xtatilgan" : "Qor yog‘moqda")
+                    Text("·").foregroundStyle(.white.opacity(0.25))
+                    Text(Temp.format(settings.config.temperature, fahrenheit: settings.config.fahrenheit))
+                }
+                .font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.55))
+            }.padding(28)
+        }
+        .frame(height: 185).clipped()
+        .overlay(alignment: .bottom) { Rectangle().fill(.white.opacity(0.07)).frame(height: 1) }
+    }
+
+    @ViewBuilder private var selectedTab: some View {
+        switch tab {
+        case 0: SnowTab(settings: settings)
+        case 1: DriftTab(settings: settings, delegate: delegate)
+        case 2: SnowmanTab(settings: settings, delegate: delegate)
+        case 3: ChristmasTab(settings: settings, delegate: delegate)
+        default: ExtrasTab(settings: settings, delegate: delegate)
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 16) {
+            Toggle("Qor", isOn: Binding(get: { !settings.paused }, set: { settings.paused = !$0 }))
+                .toggleStyle(.switch).fixedSize()
+            Divider().frame(height: 20)
+            Toggle("Ish rejimi", isOn: $settings.config.workMode).toggleStyle(.switch).fixedSize()
+            Spacer()
+            Button("Litsenziyalar") { delegate.showLicenses() }
+                .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(.white.opacity(0.4))
+        }
+        .font(.system(size: 11, weight: .medium))
+        .padding(.horizontal, 24).padding(.vertical, 16)
+        .background(.white.opacity(0.025))
+        .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.06)).frame(height: 1) }
+    }
+}
+
+private struct WinterLandscape: View {
+    let paused: Bool
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 24, paused: paused)) { timeline in
+            Canvas { context, size in
+                let time = paused ? 0 : timeline.date.timeIntervalSinceReferenceDate
+                let sky = Path(CGRect(origin: .zero, size: size))
+                context.fill(sky, with: .linearGradient(Gradient(colors: [
+                    Color(red: 0.13, green: 0.15, blue: 0.31), WinterStyle.ink]),
+                    startPoint: .zero, endPoint: CGPoint(x: size.width, y: size.height)))
+                for layer in 0..<3 {
+                    var ridge = Path()
+                    let base = size.height * (0.68 + Double(layer) * 0.09)
+                    ridge.move(to: CGPoint(x: 0, y: size.height))
+                    ridge.addLine(to: CGPoint(x: 0, y: base))
+                    ridge.addCurve(to: CGPoint(x: size.width, y: base - 12),
+                        control1: CGPoint(x: size.width * 0.35, y: base - 44),
+                        control2: CGPoint(x: size.width * 0.7, y: base + 42))
+                    ridge.addLine(to: CGPoint(x: size.width, y: size.height)); ridge.closeSubpath()
+                    context.fill(ridge, with: .color(WinterStyle.ice.opacity(0.025 + Double(layer) * 0.012)))
+                }
+                for i in 0..<45 {
+                    let x = (Double(i * 137 % 977) / 977 * size.width + sin(time * 0.12 + Double(i)) * 8)
+                    let y = (Double(i * 71 % 181) + time.truncatingRemainder(dividingBy: 1000) * (4 + Double(i % 4)))
+                        .truncatingRemainder(dividingBy: size.height)
+                    let r = Double(i % 3 + 1) * 0.65
+                    context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: r, height: r)),
+                                 with: .color(.white.opacity(x < size.width * 0.65 ? 0.10 : 0.42)))
+                }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private struct WorkshopRecipe: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            recipe("01", "Yig‘ing", "Option’ni bosib qor ustida yurgizing.", "hand.draw")
+            recipe("02", "Dumaloqlang", "Ko‘proq qor — kattaroq shar. Option’ni qo‘yib yuboring.", "circle.dotted")
+            recipe("03", "Ustma-ust", "Uchta sharni surib tering — qor odam tayyor!", "figure.wave")
+        }
+    }
+    private func recipe(_ n: String, _ title: String, _ text: String, _ symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text(n).font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundStyle(WinterStyle.accent)
+                Spacer()
+                Image(systemName: symbol).foregroundStyle(WinterStyle.ice).font(.system(size: 18))
+            }
+            Text(title).font(.system(size: 12, weight: .semibold))
+            Text(text).font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(14).background(WinterStyle.accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -77,40 +251,40 @@ private struct SnowTab: View {
     var body: some View {
         Form {
             Section {
-                Picker("Preset", selection: Binding<Intensity?>(
+                Picker("Kayfiyat", selection: Binding<Intensity?>(
                     get: { settings.config.preset },
                     set: { if let p = $0 { settings.config.apply(p) } })) {
                     ForEach(Intensity.allCases) { Text($0.title).tag(Optional($0)) }
-                    if settings.config.preset == nil { Text("Custom").tag(Intensity?.none) }
+                    if settings.config.preset == nil { Text("O‘zim sozlayman").tag(Intensity?.none) }
                 }
                 .pickerStyle(.segmented)
-                ValueSlider(title: "Snowfall density", value: $settings.config.density, range: R.density, format: times)
-                ValueSlider(title: "Max flakes", value: $settings.config.maxFlakes, range: R.maxFlakes, step: 50, format: count)
+                ValueSlider(title: "Qor zichligi", value: $settings.config.density, range: R.density, format: times)
+                ValueSlider(title: "Eng ko‘p qor zarralari", value: $settings.config.maxFlakes, range: R.maxFlakes, step: 50, format: count)
                 if settings.config.maxFlakes > 2500 {
-                    Text("Thousands of flakes cost more CPU – 30 fps on the Other tab helps.")
+                    Text("Ko‘p qor ko‘proq quvvat talab qiladi. Ish rejimi yukni kamaytiradi.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
             }
-            Section("Temperature") {
-                ValueSlider(title: "Temperature", value: temperatureBinding, range: temperatureRange, step: 1) {
+            Section("Harorat") {
+                ValueSlider(title: "Harorat", value: temperatureBinding, range: temperatureRange, step: 1) {
                     Temp.format(fahrenheit ? Temp.toCelsius($0) : $0, fahrenheit: fahrenheit)
                 }
                 Text(temperatureHint)
                     .font(.callout).foregroundStyle(.secondary)
             }
-            Section("Flakes") {
-                ValueSlider(title: "Size", value: $settings.config.flakeSize, range: R.flakeSize, format: times)
-                ValueSlider(title: "Fall speed", value: $settings.config.fallSpeed, range: R.fallSpeed, format: times)
-                ValueSlider(title: "Wind", value: $settings.config.wind, range: R.wind) {
+            Section("Qor zarralari") {
+                ValueSlider(title: "O‘lcham", value: $settings.config.flakeSize, range: R.flakeSize, format: times)
+                ValueSlider(title: "Yog‘ish tezligi", value: $settings.config.fallSpeed, range: R.fallSpeed, format: times)
+                ValueSlider(title: "Shamol", value: $settings.config.wind, range: R.wind) {
                     $0 < 0.05 ? String(localized: "calm") : times($0)
                 }
-                Toggle("Sparkling flakes", isOn: $settings.config.sparkle)
-                Toggle("Calm snow over the active window", isOn: $settings.config.calmActive)
-                Text("Flakes fade to a light dusting over the window you're working in.")
+                Toggle("Yaltiraydigan qor", isOn: $settings.config.sparkle)
+                Toggle("Faol oynada qor yengillashsin", isOn: $settings.config.calmActive)
+                Text("Ishlayotgan oynangiz ustida qor kamroq ko‘rinadi.")
                     .font(.callout).foregroundStyle(.secondary)
                 HStack {
-                    ColorPicker("Snow color", selection: tintBinding, supportsOpacity: false)
-                    Button("White") { settings.config.tint = [1, 1, 1] }
+                    ColorPicker("Qor rangi", selection: tintBinding, supportsOpacity: false)
+                    Button("Oq") { settings.config.tint = [1, 1, 1] }
                         .disabled(settings.config.tint == [1, 1, 1])
                 }
             }
@@ -140,10 +314,10 @@ private struct SnowTab: View {
 
     private var temperatureHint: String {
         let t = settings.config.temperature
-        if t > 4 { return String(localized: "Sleet: nothing settles – drifts, icicles and snowmen melt fast.") }
-        if t > 0 { return String(localized: "Thaw: wet snow – drifts and icicles melt fast and snowmen shrink.") }
-        if t > -8 { return String(localized: "Freezing: nothing melts, icicles grow and windows start to frost over. The snowplow keeps the bottom clear.") }
-        return String(localized: "Hard frost: icicles grow fast and windows freeze over from the corners.")
+        if t > 4 { return String(localized: "Ho‘l qor: hech narsa to‘planmaydi, qor va sumalaklar tez eriydi.") }
+        if t > 0 { return String(localized: "Iliq: qor va sumalaklar eriydi, qor odamlar kichrayadi.") }
+        if t > -8 { return String(localized: "Sovuq: qor erimaydi, sumalak va qirov paydo bo‘ladi.") }
+        return String(localized: "Qattiq sovuq: sumalaklar tez o‘sadi, oynalar chetidan muzlaydi.")
     }
 
     private var tintBinding: Binding<Color> {
@@ -165,43 +339,43 @@ private struct DriftTab: View {
 
     var body: some View {
         Form {
-            Section("Where snow settles") {
-                Toggle("On windows", isOn: $settings.config.onWindows)
-                Toggle("On the Dock", isOn: $settings.config.onDock)
-                Toggle("On desktop icons", isOn: $settings.config.onIcons)
-                Toggle("On desktop widgets", isOn: $settings.config.onWidgets)
+            Section("Qor qayerga to‘plansin") {
+                Toggle("Oynalarga", isOn: $settings.config.onWindows)
+                Toggle("Dock ustiga", isOn: $settings.config.onDock)
+                Toggle("Ish stoli ikonlariga", isOn: $settings.config.onIcons)
+                Toggle("Vidjetlarga", isOn: $settings.config.onWidgets)
                 if !settings.config.onWidgets {
-                    Text("Snow falls straight through desktop widgets.")
+                    Text("Qor vidjetlarda to‘planmaydi.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
-                Toggle("On the menu bar", isOn: $settings.config.onMenuBar)
+                Toggle("Menyu paneliga", isOn: $settings.config.onMenuBar)
                 if !settings.axTrusted {
                     HStack {
-                        Text("The Dock and desktop icons need Accessibility permission.")
+                        Text("Dock va ikonlarni aniq joylash uchun Accessibility ruxsati kerak.")
                             .font(.callout).foregroundStyle(.secondary)
                         Spacer()
-                        Button("Allow…") { Tracker.requestAccessibility() }
+                        Button("Ruxsat berish…") { Tracker.requestAccessibility() }
                     }
                 }
             }
-            Section("Drifts") {
-                Toggle("Unlimited – snow keeps piling up into hills", isOn: $settings.config.unlimitedDrifts)
-                ValueSlider(title: "Height on windows", value: $settings.config.windowDepth, range: R.windowDepth, format: points)
+            Section("Qor qatlamlari") {
+                Toggle("Cheklanmasin — qor to‘planishda davom etsin", isOn: $settings.config.unlimitedDrifts)
+                ValueSlider(title: "Oynalardagi qor balandligi", value: $settings.config.windowDepth, range: R.windowDepth, format: points)
                     .disabled(settings.config.unlimitedDrifts)
-                ValueSlider(title: "Height at the bottom edge", value: $settings.config.groundDepth, range: R.groundDepth, format: points)
+                ValueSlider(title: "Pastdagi qor balandligi", value: $settings.config.groundDepth, range: R.groundDepth, format: points)
                     .disabled(settings.config.unlimitedDrifts)
-                ValueSlider(title: "Pile-up speed", value: $settings.config.accumulation, range: R.accumulation, format: times)
+                ValueSlider(title: "To‘planish tezligi", value: $settings.config.accumulation, range: R.accumulation, format: times)
                 HStack {
                     Spacer()
-                    Button("Shake Off All Snow") { delegate.shakeAll() }
+                    Button("Qorlarni silkitib tushirish") { delegate.shakeAll() }
                 }
             }
-            Section("Ice") {
-                Toggle("Windows frost over when it is below zero", isOn: $settings.config.windowFrost)
-                Toggle("Icicles under windows and the menu bar", isOn: $settings.config.icicles)
-                ValueSlider(title: "Icicle length", value: $settings.config.icicleLength, range: R.icicleLength, format: times)
+            Section("Ayoz") {
+                Toggle("Sovuqda oynalarni qirov qoplasin", isOn: $settings.config.windowFrost)
+                Toggle("Oyna va menyu ostida sumalaklar", isOn: $settings.config.icicles)
+                ValueSlider(title: "Sumalak uzunligi", value: $settings.config.icicleLength, range: R.icicleLength, format: times)
                     .disabled(!settings.config.icicles)
-                Text("Melting and frost follow the temperature on the Snowfall tab.")
+                Text("Qor yog‘ishi bo‘limidagi harorat erish va qirovga ta’sir qiladi.")
                     .font(.callout).foregroundStyle(.secondary)
             }
         }
@@ -215,51 +389,66 @@ private struct SnowmanTab: View {
 
     var body: some View {
         Form {
+            Section("O‘z qo‘lingiz bilan yasang") {
+                Toggle("Option bilan qor yig‘ish", isOn: $settings.config.craftSnow)
+                WorkshopRecipe().padding(.vertical, 6)
+                HStack(spacing: 12) {
+                    Button("Yangi qor to‘kish") { delegate.prepareSnowWorkshop() }
+                        .buttonStyle(.borderedProminent)
+                    Button("Yasaganlarimni tozalash") { delegate.clearSnowWorkshop() }
+                }
+                Text("Sharlarni oddiy sichqoncha bilan suring. Moviy halqa ustiga qo‘yib yuborsangiz yopishadi. Option + Shift — qorni kurak bilan tozalash.")
+                    .font(.callout).foregroundStyle(.secondary)
+                if settings.config.temperature > 0 {
+                    Text("Hozir qor eriydi. Qor yasash uchun haroratni 0°C yoki undan pastga tushiring.")
+                        .font(.callout).foregroundStyle(WinterStyle.ice)
+                }
+            }
             Section {
-                Toggle("Build snowmen on the Dock", isOn: $settings.config.snowman)
-                ValueSlider(title: "Number of snowmen", value: $settings.config.snowmanCount, range: R.snowmanCount, step: 1,
+                Toggle("Dock’da avtomatik qor odamlar", isOn: $settings.config.snowman)
+                ValueSlider(title: "Qor odamlar soni", value: $settings.config.snowmanCount, range: R.snowmanCount, step: 1,
                             format: count)
-                ValueSlider(title: "Size", value: $settings.config.snowmanSize, range: R.snowmanSize, format: times)
-                ValueSlider(title: "Break between snowmen", value: $settings.config.snowmanBreak, range: R.snowmanBreak) {
+                ValueSlider(title: "O‘lcham", value: $settings.config.snowmanSize, range: R.snowmanSize, format: times)
+                ValueSlider(title: "Qor odamlar orasidagi tanaffus", value: $settings.config.snowmanBreak, range: R.snowmanBreak) {
                     $0 < 1 ? String(localized: "\(Int($0 * 60)) s") : String(localized: "\(Int($0.rounded())) min")
                 }
-                Toggle("Fade a snowman that covers a window", isOn: $settings.config.snowmanGhost)
+                Toggle("Oynani yopsa shaffoflashsin", isOn: $settings.config.snowmanGhost)
                 HStack {
                     Spacer()
-                    Button("Back to the Dock") { delegate.resetSnowmen() }
-                    Button("Build Now") { delegate.buildSnowmanNow() }
+                    Button("Dock’ka qaytarish") { delegate.resetSnowmen() }
+                    Button("Hozir yasash") { delegate.buildSnowmanNow() }
                 }
-                Text("Drag a snowman with the mouse to put it on a window or anywhere else. If the window moves, it falls.")
+                Text("Qor odamni sichqoncha bilan istalgan joyga suring. U turgan oyna siljisa, pastga tushadi.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             .disabled(!settings.config.snowman)
-            Section("Snowball fight") {
-                Toggle("The snowman throws snowballs at windows and icons", isOn: $settings.config.snowballs)
-                ValueSlider(title: "Throws roughly every", value: $settings.config.throwEvery, range: R.throwEvery) {
+            Section("Qorbo‘ron") {
+                Toggle("Qor odam oynalarga qor otsin", isOn: $settings.config.snowballs)
+                ValueSlider(title: "Qor otish oralig‘i", value: $settings.config.throwEvery, range: R.throwEvery) {
                     String(localized: "\(Int($0)) s")
                 }
                 .disabled(!settings.config.snowballs)
-                Text("Click the snowman – every third hit knocks off a level. Sometimes it fights back.")
+                Text("Qor odamni bosing — har uchinchi zarbada bitta shar tushadi. Ba’zida o‘zi ham qor otadi.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             .disabled(!settings.config.snowman)
-            Section("Skiers") {
-                Toggle("Skiers ride along the snow at the bottom now and then", isOn: $settings.config.skier)
-                ValueSlider(title: "Come roughly every", value: $settings.config.skierInterval, range: R.skierEvery, step: 0.5) {
+            Section("Chang‘ichilar") {
+                Toggle("Ba’zan chang‘ichilar o‘tib tursin", isOn: $settings.config.skier)
+                ValueSlider(title: "Kelish oralig‘i", value: $settings.config.skierInterval, range: R.skierEvery, step: 0.5) {
                     $0 < 1 ? String(localized: "\(Int(($0 * 60).rounded())) s")
                            : ($0.truncatingRemainder(dividingBy: 1) == 0 ? String(localized: "\(Int($0)) min")
                                                                           : $0.formatted(.number.precision(.fractionLength(1))) + " min")
                 }
                 .disabled(!settings.config.skier)
-                ValueSlider(title: "Skiers at once", value: $settings.config.skierCount, range: 1...5, step: 1) {
+                ValueSlider(title: "Chang‘ichilar soni", value: $settings.config.skierCount, range: 1...5, step: 1) {
                     "\(Int($0))"
                 }
                 .disabled(!settings.config.skier)
                 HStack {
                     Spacer()
-                    Button("Send Skiers Now") { delegate.sendSkier() }
+                    Button("Hozir yuborish") { delegate.sendSkier() }
                 }
-                Text("They ski along the bottom of the screen, jump up onto the Dock, ride across it and jump off the other end.")
+                Text("Chang‘ichilar ekran pastidan kelib, Dock ustiga chiqishadi va narigi tomondan sakrab tushishadi.")
                     .font(.callout).foregroundStyle(.secondary)
             }
         }
@@ -274,33 +463,33 @@ private struct ChristmasTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Christmas mode", isOn: $settings.config.christmas)
+                Toggle("Bayram rejimi", isOn: $settings.config.christmas)
             }
-            Section("Decorations") {
-                Toggle("Christmas tree next to the Dock", isOn: $settings.config.christmasTree)
-                ValueSlider(title: "Tree size", value: $settings.config.treeSize, range: R.treeSize, format: times)
+            Section("Bezaklar") {
+                Toggle("Dock yonida archa", isOn: $settings.config.christmasTree)
+                ValueSlider(title: "Archa o‘lchami", value: $settings.config.treeSize, range: R.treeSize, format: times)
                     .disabled(!settings.config.christmasTree)
-                Toggle("String of lights under the menu bar", isOn: $settings.config.christmasGarland)
-                Toggle("Santa hats on snowmen", isOn: $settings.config.christmasHats)
-                Picker("Lights", selection: $settings.config.lightStyle) {
-                    Text("Colorful, twinkling").tag(Christmas.LightStyle.colorful.rawValue)
-                    Text("Warm white").tag(Christmas.LightStyle.warmWhite.rawValue)
-                    Text("Chasing").tag(Christmas.LightStyle.chase.rawValue)
+                Toggle("Menyu ostida chiroqlar", isOn: $settings.config.christmasGarland)
+                Toggle("Qor odamlarga bayram qalpog‘i", isOn: $settings.config.christmasHats)
+                Picker("Chiroqlar", selection: $settings.config.lightStyle) {
+                    Text("Rangli, miltillaydigan").tag(Christmas.LightStyle.colorful.rawValue)
+                    Text("Iliq oq").tag(Christmas.LightStyle.warmWhite.rawValue)
+                    Text("Ketma-ket yonadigan").tag(Christmas.LightStyle.chase.rawValue)
                 }
-                ValueSlider(title: "Light size", value: $settings.config.lightSize, range: 0.5...2.5, format: times)
-                ValueSlider(title: "Brightness", value: $settings.config.lightGlow, range: 0...2.5) {
+                ValueSlider(title: "Chiroq o‘lchami", value: $settings.config.lightSize, range: 0.5...2.5, format: times)
+                ValueSlider(title: "Yorqinlik", value: $settings.config.lightGlow, range: 0...2.5) {
                     $0 < 0.02 ? String(localized: "no glow") : times($0)
                 }
-                Toggle("Keep the lights twinkling while the snow is paused", isOn: $settings.config.lightsWhilePaused)
-                Text("Costs a little power.")
+                Toggle("Qor to‘xtasa ham chiroqlar yonsin", isOn: $settings.config.lightsWhilePaused)
+                Text("Biroz qo‘shimcha quvvat sarflaydi.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             .disabled(!settings.config.christmas)
-            Section("Santa") {
-                Toggle("Santa flies by now and then", isOn: $settings.config.santa)
+            Section("Qorbobo") {
+                Toggle("Ba’zan Qorbobo uchib o‘tsin", isOn: $settings.config.santa)
                 HStack {
                     Spacer()
-                    Button("Send Santa Now") { delegate.launchSanta() }
+                    Button("Qorboboni chaqirish") { delegate.launchSanta() }
                 }
             }
             .disabled(!settings.config.christmas)
@@ -315,47 +504,47 @@ private struct ExtrasTab: View {
 
     var body: some View {
         Form {
-            Section("Extras") {
-                Toggle("The cursor scatters flakes and a quick swipe brushes snow off", isOn: $settings.config.mouse)
-                Text("Hold ⌥ Option to get a shovel at the cursor and clear away the snow it touches – even at the bottom of the screen and on the Dock. Snowmen can be dragged with the mouse.")
+            Section("Qo‘shimchalar") {
+                Toggle("Kursor qorni sochsin va tez harakatda silkitib tushirsin", isOn: $settings.config.mouse)
+                Text("Option — qor yig‘ish. Option + Shift — kurak. Sharlar va qor odamlarni oddiy sichqoncha bilan suring.")
                     .font(.callout).foregroundStyle(.secondary)
-                Toggle("A snowplow clears the snow at the bottom by itself", isOn: $settings.config.snowplow)
-                Text("It drives across the whole screen – over the Dock too – whenever the snow at the bottom gets deep.")
+                Toggle("Qor tozalagich avtomatik ishlasin", isOn: $settings.config.snowplow)
+                Text("Pastda qor qalinlashganda tozalagich ekran va Dock bo‘ylab yuradi.")
                     .font(.callout).foregroundStyle(.secondary)
-                ValueSlider(title: "Comes when the snow at the bottom reaches", value: $settings.config.autoPlowHeight, range: 10...150, step: 5) {
+                ValueSlider(title: "Qor shuncha to‘planganda kelsin", value: $settings.config.autoPlowHeight, range: 10...150, step: 5) {
                     String(localized: "\(Int($0)) pt")
                 }
                 .disabled(!settings.config.snowplow)
                 HStack {
                     Spacer()
-                    Button("Send the Snowplow Now") { delegate.sendPlow() }
+                    Button("Tozalagichni chaqirish") { delegate.sendPlow() }
                         .disabled(!settings.config.snowplow)
                 }
-                Toggle("Frosted screen edges", isOn: $settings.config.frost)
-                ValueSlider(title: "Snow over full-screen apps", value: $settings.config.fullscreenSnow, range: 0...1, step: 0.05) {
+                Toggle("Ekran chetlarida qirov", isOn: $settings.config.frost)
+                ValueSlider(title: "Fullscreen’da qor ko‘rinishi", value: $settings.config.fullscreenSnow, range: 0...1, step: 0.05) {
                     $0 < 0.02 ? String(localized: "none") : ($0.formatted(.percent.precision(.fractionLength(0))))
                 }
-                Text("In full screen only the falling snow (faded) and the icicles at the top stay – drifts, snowmen and the tree hide, and everything is back when you leave full screen.")
+                Text("Fullscreen’da faqat yengil qor va yuqoridagi sumalaklar qoladi. Qolgan bezaklar yashirinadi, qaytganda tiklanadi.")
                     .font(.callout).foregroundStyle(.secondary)
             }
-            Section("Performance") {
-                Picker("Frame rate", selection: $settings.config.fps) {
-                    Text("30 fps (power saving)").tag(30)
+            Section("Tezlik va sifat") {
+                Picker("Kadrlar tezligi", selection: $settings.config.fps) {
+                    Text("30 fps — tejamkor").tag(30)
                     Text("60 fps").tag(60)
-                    Text("120 fps (ProMotion)").tag(120)
+                    Text("120 fps — ProMotion").tag(120)
                 }
-                Toggle("Draw calm snowfall at 30 fps (saves power)", isOn: $settings.config.calmLowerRate)
-                Text("Low Power Mode always caps the frame rate at 30 fps. When nothing is falling, rendering stops.")
+                Toggle("Sokin qor 30 fps’da ishlasin", isOn: $settings.config.calmLowerRate)
+                Text("Quvvat tejash rejimida ko‘pi bilan 30 fps ishlaydi. Harakat yo‘q bo‘lsa chizish to‘xtaydi.")
                     .font(.callout).foregroundStyle(.secondary)
-                Toggle("Sharp Retina rendering (uses more power)", isOn: $settings.config.retina)
+                Toggle("Retina sifati — ko‘proq quvvat sarflaydi", isOn: $settings.config.retina)
             }
-            Section("Battery") {
-                Toggle("Save power on battery", isOn: $settings.config.batterySaver)
-                Text("On battery: 30 fps, standard resolution, fewer flakes, no sparkle.")
+            Section("Batareya") {
+                Toggle("Batareyada quvvatni tejash", isOn: $settings.config.batterySaver)
+                Text("Batareyada: 30 fps, oddiy sifat, kamroq qor va yaltirashsiz.")
                     .font(.callout).foregroundStyle(.secondary)
             }
-            Section("General") {
-                Toggle("Launch at login", isOn: Binding(get: { settings.launchAtLogin },
+            Section("Umumiy") {
+                Toggle("Mac yoqilganda ishga tushsin", isOn: Binding(get: { settings.launchAtLogin },
                                                        set: { settings.setLaunchAtLogin($0) }))
                 if settings.loginStatus == .requiresApproval || settings.loginError != nil {
                     HStack {
@@ -363,19 +552,19 @@ private struct ExtrasTab: View {
                             if let error = settings.loginError {
                                 Text(error)
                             } else {
-                                Text("Allow iSnow in System Settings → General → Login Items to finish.")
+                                Text("System Settings → General → Login Items’da iSnow’ga ruxsat bering.")
                             }
                         }
                         .font(.callout).foregroundStyle(.secondary)
                         Spacer()
-                        Button("Open Login Items Settings") { SMAppService.openSystemSettingsLoginItems() }
+                        Button("Kirish sozlamalarini ochish") { SMAppService.openSystemSettingsLoginItems() }
                     }
                 }
-                Toggle("Use Fahrenheit", isOn: $settings.config.fahrenheit)
-                Toggle("Hide the snow from screenshots and screen sharing", isOn: $settings.config.hideFromCapture)
+                Toggle("Farengeyt o‘lchovi", isOn: $settings.config.fahrenheit)
+                Toggle("Skrinshot va ekran ulashishda qorni yashirish", isOn: $settings.config.hideFromCapture)
                 HStack {
                     Spacer()
-                    Button("Restore Defaults") { settings.resetToDefaults() }
+                    Button("Boshlang‘ich holatga qaytarish") { settings.resetToDefaults() }
                 }
             }
         }
